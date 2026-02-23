@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LA Staff System</title>
+
+<style>
+body{font-family:Segoe UI;background:#0f0f0f;color:white;margin:0}
+.center{display:flex;justify-content:center;align-items:center;height:100vh}
+.box{background:#1c1c1c;padding:30px;border-radius:15px;width:340px;text-align:center}
+input,select{width:100%;padding:8px;margin:6px 0;border-radius:8px;border:none;background:#2a2a2a;color:white}
+button{padding:6px 10px;margin:3px;border:none;border-radius:8px;cursor:pointer;font-weight:bold}
+.save{background:#00c853}
+.delete{background:#d32f2f}
+.edit{background:#ff9800}
+.move{background:#2196f3}
+.creator{background:#9c27b0}
+.lock{background:#607d8b}
+.hidden{display:none}
+.panel{padding:20px}
+table{width:100%;border-collapse:collapse;margin-top:15px}
+th,td{padding:8px;border-bottom:1px solid #333;text-align:center}
+th{background:#1f1f1f}
+.rank-creator{color:#ff5252;font-weight:bold}
+.rank-admin{color:#ffd740;font-weight:bold}
+.rank-manager{color:#00e5ff;font-weight:bold}
+.rank-moderator{color:#69f0ae;font-weight:bold}
+.dashboard{background:#1a1a1a;padding:15px;border-radius:10px;margin-bottom:15px}
+.logbox{background:#111;padding:10px;height:150px;overflow:auto;border-radius:10px;font-size:12px}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="center" id="loginScreen">
+<div class="box">
+<h2>Staff Login</h2>
+<input id="loginUser" placeholder="Benutzername">
+<input type="password" id="loginPass" placeholder="Passwort">
+<button class="save" onclick="login()">Login</button>
+</div>
+</div>
+
+<!-- MAIN -->
+<div id="panel" class="hidden panel">
+
+<button onclick="logout()">Logout</button>
+<button id="lockBtn" class="lock hidden" onclick="toggleLock()">Lockdown</button>
+<button id="creatorBtn" class="creator hidden" onclick="toggleCreator()">Creator Panel</button>
+
+<div class="dashboard">
+<h3>Wochen Statistik</h3>
+<div id="stats"></div>
+</div>
+
+<h3>Staff hinzufügen / bearbeiten</h3>
+<input type="hidden" id="editIndex">
+
+<input id="roblox" placeholder="Roblox Username">
+<input id="discord" placeholder="Discord Username">
+
+<select id="rank">
+<option>Creator</option>
+<option>Admin</option>
+<option>Manager</option>
+<option>Moderator</option>
+</select>
+
+<input type="number" id="minutes" placeholder="Minuten Woche">
+<input type="number" id="tickets" placeholder="Tickets">
+
+<button class="save" onclick="saveStaff()">Speichern</button>
+
+<h3>Staff Übersicht</h3>
+<table>
+<thead>
+<tr>
+<th>Roblox</th>
+<th>Discord</th>
+<th>Rank</th>
+<th>Minuten</th>
+<th>Tickets</th>
+<th>Aktion</th>
+</tr>
+</thead>
+<tbody id="staffTable"></tbody>
+</table>
+
+<!-- CREATOR PANEL -->
+<div id="creatorPanel" class="hidden">
+
+<h3>Admin Verwaltung</h3>
+
+<input type="hidden" id="adminEditIndex">
+<input id="adminUser" placeholder="Username">
+<input id="adminPass" placeholder="Passwort">
+<button class="save" onclick="saveAdmin()">Speichern</button>
+
+<ul id="adminList"></ul>
+
+<h3>Creator Logs</h3>
+<div id="logs" class="logbox"></div>
+
+</div>
+
+</div>
+
+<script>
+
+const CREATOR = {user:"MrRecc",pass:"andrej8968"}
+let role=""
+let locked = localStorage.getItem("locked")==="true"
+
+function log(text){
+let logs = JSON.parse(localStorage.getItem("logs")) || []
+logs.push(new Date().toLocaleString()+" - "+text)
+localStorage.setItem("logs",JSON.stringify(logs))
+loadLogs()
+}
+
+function login(){
+if(locked){ alert("System im Lockdown"); return }
+
+const u = document.getElementById("loginUser").value
+const p = document.getElementById("loginPass").value
+const admins = JSON.parse(localStorage.getItem("admins")) || []
+
+if(u===CREATOR.user && p===CREATOR.pass){
+role="creator"
+document.getElementById("creatorBtn").classList.remove("hidden")
+document.getElementById("lockBtn").classList.remove("hidden")
+}
+else{
+const found = admins.find(a=>a.user===u && a.pass===p && !a.frozen)
+if(!found){ alert("Login falsch oder eingefroren"); return }
+role="admin"
+}
+
+document.getElementById("loginScreen").classList.add("hidden")
+document.getElementById("panel").classList.remove("hidden")
+loadStaff()
+log("Login: "+u)
+}
+
+function logout(){ location.reload() }
+
+function toggleLock(){
+if(role!=="creator") return
+locked=!locked
+localStorage.setItem("locked",locked)
+log("Lockdown: "+locked)
+alert("Lockdown geändert")
+}
+
+function getStaff(){ return JSON.parse(localStorage.getItem("staff")) || [] }
+function setStaff(data){ localStorage.setItem("staff",JSON.stringify(data)) }
+
+function saveStaff(){
+let staff = getStaff()
+let index = document.getElementById("editIndex").value
+
+let data = {
+roblox: document.getElementById("roblox").value,
+discord: document.getElementById("discord").value,
+rank: document.getElementById("rank").value,
+minutes: parseInt(document.getElementById("minutes").value)||0,
+tickets: parseInt(document.getElementById("tickets").value)||0
+}
+
+if(index===""){
+staff.push(data)
+}else{
+staff[index]=data
+}
+
+setStaff(staff)
+clearForm()
+loadStaff()
+log("Staff gespeichert: "+data.roblox)
+}
+
+function clearForm(){
+document.getElementById("roblox").value=""
+document.getElementById("discord").value=""
+document.getElementById("minutes").value=""
+document.getElementById("tickets").value=""
+document.getElementById("editIndex").value=""
+}
+
+function editStaff(i){
+let s = getStaff()[i]
+document.getElementById("roblox").value=s.roblox
+document.getElementById("discord").value=s.discord
+document.getElementById("rank").value=s.rank
+document.getElementById("minutes").value=s.minutes
+document.getElementById("tickets").value=s.tickets
+document.getElementById("editIndex").value=i
+}
+
+function deleteStaff(i){
+if(role!=="creator"){ alert("Nur Creator darf löschen"); return }
+let staff = getStaff()
+log("Staff gelöscht: "+staff[i].roblox)
+staff.splice(i,1)
+setStaff(staff)
+loadStaff()
+}
+
+function moveUp(i){
+let staff=getStaff()
+if(i<=0)return
+let temp=staff[i-1]
+staff[i-1]=staff[i]
+staff[i]=temp
+setStaff(staff)
+loadStaff()
+}
+
+function moveDown(i){
+let staff=getStaff()
+if(i>=staff.length-1)return
+let temp=staff[i+1]
+staff[i+1]=staff[i]
+staff[i]=temp
+setStaff(staff)
+loadStaff()
+}
+
+function getRankClass(r){
+if(r==="Creator")return"rank-creator"
+if(r==="Admin")return"rank-admin"
+if(r==="Manager")return"rank-manager"
+return"rank-moderator"
+}
+
+function loadStaff(){
+let staff=getStaff()
+let table=document.getElementById("staffTable")
+table.innerHTML=""
+let totalM=0,totalT=0
+
+staff.forEach((s,i)=>{
+totalM+=s.minutes
+totalT+=s.tickets
+
+table.innerHTML+=`
+<tr>
+<td>${s.roblox}</td>
+<td>${s.discord}</td>
+<td class="${getRankClass(s.rank)}">${s.rank}</td>
+<td>${s.minutes}</td>
+<td>${s.tickets}</td>
+<td>
+<button class="edit" onclick="editStaff(${i})">Edit</button>
+<button class="move" onclick="moveUp(${i})">↑</button>
+<button class="move" onclick="moveDown(${i})">↓</button>
+<button class="delete" onclick="deleteStaff(${i})">X</button>
+</td>
+</tr>`
+})
+
+document.getElementById("stats").innerHTML=
+"Gesamt Minuten: "+totalM+"<br>"+
+"Gesamt Tickets: "+totalT+"<br>"+
+"Staff Anzahl: "+staff.length
+}
+
+function toggleCreator(){
+document.getElementById("creatorPanel").classList.toggle("hidden")
+loadAdmins()
+loadLogs()
+}
+
+function saveAdmin(){
+let admins=JSON.parse(localStorage.getItem("admins"))||[]
+let index=document.getElementById("adminEditIndex").value
+let data={
+user:document.getElementById("adminUser").value,
+pass:document.getElementById("adminPass").value,
+frozen:false
+}
+
+if(index===""){
+admins.push(data)
+}else{
+admins[index]=data
+}
+
+localStorage.setItem("admins",JSON.stringify(admins))
+document.getElementById("adminUser").value=""
+document.getElementById("adminPass").value=""
+document.getElementById("adminEditIndex").value=""
+log("Admin gespeichert: "+data.user)
+loadAdmins()
+}
+
+function editAdmin(i){
+let admins=JSON.parse(localStorage.getItem("admins"))
+document.getElementById("adminUser").value=admins[i].user
+document.getElementById("adminPass").value=admins[i].pass
+document.getElementById("adminEditIndex").value=i
+}
+
+function freezeAdmin(i){
+let admins=JSON.parse(localStorage.getItem("admins"))
+admins[i].frozen=!admins[i].frozen
+localStorage.setItem("admins",JSON.stringify(admins))
+log("Admin Freeze geändert: "+admins[i].user)
+loadAdmins()
+}
+
+function deleteAdmin(i){
+let admins=JSON.parse(localStorage.getItem("admins"))
+log("Admin gelöscht: "+admins[i].user)
+admins.splice(i,1)
+localStorage.setItem("admins",JSON.stringify(admins))
+loadAdmins()
+}
+
+function loadAdmins(){
+let admins=JSON.parse(localStorage.getItem("admins"))||[]
+let list=document.getElementById("adminList")
+list.innerHTML=""
+admins.forEach((a,i)=>{
+list.innerHTML+=`
+<li>${a.user} ${a.frozen?"(Gefroren)":""}
+<button onclick="editAdmin(${i})">Edit</button>
+<button onclick="freezeAdmin(${i})">Freeze</button>
+<button onclick="deleteAdmin(${i})">X</button>
+</li>`
+})
+}
+
+function loadLogs(){
+let l=JSON.parse(localStorage.getItem("logs"))||[]
+document.getElementById("logs").innerHTML=l.join("<br>")
+}
+
+</script>
+
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+const SUPABASE_URL = "https://aszymljelmsrjcdmngxc.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzenltbGplbG1zcmpjZG1uZ3hjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NzEwNzUsImV4cCI6MjA4NzQ0NzA3NX0.NQmSUGt_NqIHojweHJszfiJ82ElTmLSXYF4eBEEVWeI";
+
+const supabase = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY
+);
+
+console.log("Supabase verbunden!");
+</script>
+
+</body>
+</html>
+</body>
+</html>
